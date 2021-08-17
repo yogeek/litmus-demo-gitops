@@ -1,0 +1,188 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  creationTimestamp: null
+  labels:
+    cluster_id: c2f63b7f-494b-49fd-9b1f-3288937c4c74
+    subject: custom-chaos-workflow_litmus
+    workflow_id: 65f2c3ce-271b-4cee-ac94-63b8c48fd3c6
+    workflows.argoproj.io/controller-instanceid: c2f63b7f-494b-49fd-9b1f-3288937c4c74
+  name: custom-chaos-workflow-1629214533
+  namespace: litmus
+spec:
+  arguments:
+    parameters:
+    - name: adminModeNamespace
+      value: litmus
+  entrypoint: custom-chaos
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  serviceAccountName: argo-chaos
+  templates:
+  - arguments: {}
+    inputs: {}
+    metadata: {}
+    name: custom-chaos
+    outputs: {}
+    steps:
+    - - arguments: {}
+        name: install-chaos-experiments
+        template: install-chaos-experiments
+    - - arguments: {}
+        name: pod-io-stress
+        template: pod-io-stress
+  - arguments: {}
+    container:
+      args:
+      - kubectl apply -f /tmp/pod-io-stress.yaml -n {{workflow.parameters.adminModeNamespace}} |  sleep 30
+      command:
+      - sh
+      - -c
+      image: litmuschaos/k8s:latest
+      name: ""
+      resources: {}
+    inputs:
+      artifacts:
+      - name: pod-io-stress
+        path: /tmp/pod-io-stress.yaml
+        raw:
+          data: |
+            apiVersion: litmuschaos.io/v1alpha1
+            description:
+              message: |
+                IO stress on a app pods belonging to an app deployment
+            kind: ChaosExperiment
+            metadata:
+              name: pod-io-stress
+              labels:
+                name: pod-io-stress
+                app.kubernetes.io/part-of: litmus
+                app.kubernetes.io/component: chaosexperiment
+                app.kubernetes.io/version: 2.0.0
+            spec:
+              definition:
+                scope: Namespaced
+                permissions:
+                  - apiGroups:
+                      - ""
+                      - batch
+                      - apps
+                      - apps.openshift.io
+                      - argoproj.io
+                      - litmuschaos.io
+                    resources:
+                      - jobs
+                      - pods
+                      - pods/log
+                      - replicationcontrollers
+                      - deployments
+                      - statefulsets
+                      - daemonsets
+                      - replicasets
+                      - deploymentconfigs
+                      - rollouts
+                      - pods/exec
+                      - events
+                      - chaosengines
+                      - chaosexperiments
+                      - chaosresults
+                    verbs:
+                      - create
+                      - list
+                      - get
+                      - patch
+                      - update
+                      - delete
+                      - deletecollection
+                image: litmuschaos/go-runner:2.0.0
+                imagePullPolicy: Always
+                args:
+                  - -c
+                  - ./experiments -name pod-io-stress
+                command:
+                  - /bin/bash
+                env:
+                  - name: TOTAL_CHAOS_DURATION
+                    value: "120"
+                  - name: FILESYSTEM_UTILIZATION_PERCENTAGE
+                    value: "10"
+                  - name: FILESYSTEM_UTILIZATION_BYTES
+                    value: ""
+                  - name: NUMBER_OF_WORKERS
+                    value: "4"
+                  - name: PODS_AFFECTED_PERC
+                    value: ""
+                  - name: VOLUME_MOUNT_PATH
+                    value: ""
+                  - name: TARGET_PODS
+                    value: ""
+                  - name: RAMP_TIME
+                    value: ""
+                  - name: LIB
+                    value: litmus
+                  - name: LIB_IMAGE
+                    value: litmuschaos/go-runner:2.0.0
+                  - name: SOCKET_PATH
+                    value: /var/run/docker.sock
+                  - name: SEQUENCE
+                    value: parallel
+                labels:
+                  name: pod-io-stress
+                  app.kubernetes.io/part-of: litmus
+                  app.kubernetes.io/component: experiment-job
+                  app.kubernetes.io/version: 2.0.0
+    metadata: {}
+    name: install-chaos-experiments
+    outputs: {}
+  - arguments: {}
+    container:
+      args:
+      - -file=/tmp/chaosengine-pod-io-stress.yaml
+      - -saveName=/tmp/engine-name
+      image: litmuschaos/litmus-checker:latest
+      name: ""
+      resources: {}
+    inputs:
+      artifacts:
+      - name: pod-io-stress
+        path: /tmp/chaosengine-pod-io-stress.yaml
+        raw:
+          data: |
+            apiVersion: litmuschaos.io/v1alpha1
+            kind: ChaosEngine
+            metadata:
+              namespace: "{{workflow.parameters.adminModeNamespace}}"
+              generateName: pod-io-stress
+              labels:
+                instance_id: 385d3279-6265-4db3-a51f-824b863e7383
+                workflow_name: custom-chaos-workflow-1629214533
+            spec:
+              appinfo:
+                appns: default
+                applabel: app=nginx
+                appkind: deployment
+              jobCleanUpPolicy: retain
+              engineState: active
+              chaosServiceAccount: litmus-admin
+              experiments:
+                - name: pod-io-stress
+                  spec:
+                    components:
+                      env:
+                        - name: TOTAL_CHAOS_DURATION
+                          value: "120"
+                        - name: FILESYSTEM_UTILIZATION_PERCENTAGE
+                          value: "10"
+                        - name: CONTAINER_RUNTIME
+                          value: docker
+                        - name: SOCKET_PATH
+                          value: /var/run/docker.sock
+    metadata:
+      labels:
+        weight: "10"
+    name: pod-io-stress
+    outputs: {}
+status:
+  finishedAt: null
+  startedAt: null
