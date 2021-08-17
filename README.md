@@ -1,0 +1,1 @@
+# Litmus gitops settings
