@@ -1,0 +1,129 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  creationTimestamp: null
+  labels:
+    cluster_id: c2f63b7f-494b-49fd-9b1f-3288937c4c74
+    subject: custom-chaos-workflow_litmus
+    workflow_id: d734c5ef-ca50-4293-8b37-2b020cb120ab
+    workflows.argoproj.io/controller-instanceid: c2f63b7f-494b-49fd-9b1f-3288937c4c74
+  name: custom-chaos-workflow-1629310425
+  namespace: litmus
+spec:
+  arguments:
+    parameters:
+    - name: adminModeNamespace
+      value: litmus
+  entrypoint: custom-chaos
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  serviceAccountName: argo-chaos
+  templates:
+  - arguments: {}
+    inputs: {}
+    metadata: {}
+    name: custom-chaos
+    outputs: {}
+    steps:
+    - - arguments: {}
+        name: install-chaos-experiments
+        template: install-chaos-experiments
+    - - arguments: {}
+        name: container-kill
+        template: container-kill
+  - arguments: {}
+    container:
+      args:
+      - kubectl apply -f /tmp/container-kill.yaml -n {{workflow.parameters.adminModeNamespace}} |  sleep 30
+      command:
+      - sh
+      - -c
+      image: litmuschaos/k8s:latest
+      name: ""
+      resources: {}
+    inputs:
+      artifacts:
+      - name: container-kill
+        path: /tmp/container-kill.yaml
+        raw:
+          data: "apiVersion: litmuschaos.io/v1alpha1\ndescription:\n  message: |\n    Kills a container belonging to an application pod \nkind: ChaosExperiment\nmetadata:\n  name: container-kill\n  labels:\n    name: container-kill\n    app.kubernetes.io/part-of: litmus\n    app.kubernetes.io/component: chaosexperiment\n    app.kubernetes.io/version: 2.0.0\nspec:\n  definition:\n    scope: Namespaced\n    permissions:\n      - apiGroups:\n          - \"\"\n          - apps\n          - batch\n          - apps.openshift.io\n          - argoproj.io\n          - litmuschaos.io\n        resources:\n          - jobs\n          - pods\n          - pods/log\n          - events\n          - replicationcontrollers\n          - deployments\n          - statefulsets\n          - daemonsets\n          - replicasets\n          - deploymentconfigs\n          - rollouts\n          - pods/exec\n          - chaosengines\n          - chaosexperiments\n          - chaosresults\n        verbs:\n          - create\n          - list\n          - get\n          - update\n          - patch\n          - delete\n          - deletecollection\n    image: litmuschaos/go-runner:2.0.0\n    imagePullPolicy: Always\n    args:\n      - -c\n      - ./experiments -name container-kill\n    command:\n      - /bin/bash\n    env:\n      - name: TARGET_CONTAINER\n        value: \"\"\n      - name: RAMP_TIME\n        value: \"\"\n      - name: LIB\n        value: litmus\n      - name: TARGET_PODS\n        value: \"\"\n      - name: CHAOS_INTERVAL\n        value: \"10\"\n      - name: SIGNAL\n        value: SIGKILL\n      - name: SOCKET_PATH\n        value: /var/run/docker.sock\n      - name: CONTAINER_RUNTIME\n        value: docker\n      - name: TOTAL_CHAOS_DURATION\n        value: \"20\"\n      - name: PODS_AFFECTED_PERC\n        value: \"\"\n      - name: LIB_IMAGE\n        value: litmuschaos/go-runner:2.0.0\n      - name: SEQUENCE\n        value: parallel\n    labels:\n      name: container-kill\n      app.kubernetes.io/part-of: litmus\n      app.kubernetes.io/component: experiment-job\n      app.kubernetes.io/version: 2.0.0\n"
+    metadata: {}
+    name: install-chaos-experiments
+    outputs: {}
+  - arguments: {}
+    container:
+      args:
+      - -file=/tmp/chaosengine-container-kill.yaml
+      - -saveName=/tmp/engine-name
+      image: litmuschaos/litmus-checker:latest
+      name: ""
+      resources: {}
+    inputs:
+      artifacts:
+      - name: container-kill
+        path: /tmp/chaosengine-container-kill.yaml
+        raw:
+          data: |
+            apiVersion: litmuschaos.io/v1alpha1
+            kind: ChaosEngine
+            metadata:
+              namespace: "{{workflow.parameters.adminModeNamespace}}"
+              generateName: container-kill
+              labels:
+                instance_id: 47eef318-3516-4e03-a9d7-d80685df58e3
+                context: container-kill_litmus
+                workflow_name: custom-chaos-workflow-1629310425
+            spec:
+              jobCleanUpPolicy: retain
+              engineState: active
+              appinfo:
+                appns: litmus
+                applabel: app.kubernetes.io/name=podtato-head
+                appkind: deployment
+              chaosServiceAccount: litmus-admin
+              experiments:
+                - name: container-kill
+                  spec:
+                    components:
+                      env:
+                        - name: TOTAL_CHAOS_DURATION
+                          value: "20"
+                        - name: CHAOS_INTERVAL
+                          value: "10"
+                        - name: CONTAINER_RUNTIME
+                          value: containerd
+                        - name: SOCKET_PATH
+                          value: /var/run/docker.sock
+                        - name: PODS_AFFECTED_PERC
+                          value: ""
+                        - name: TARGET_CONTAINER
+                          value: ""
+                    probe:
+                      - name: ph
+                        type: httpProbe
+                        mode: Continuous
+                        runProperties:
+                          probeTimeout: 1
+                          retry: 1
+                          interval: 1
+                          probePollingInterval: 1
+                          initialDelaySeconds: 0
+                          stopOnFailure: false
+                        httpProbe/inputs:
+                          url: http://podtato-main.litmus.cluster.svc.local:9000
+                          insecureSkipVerify: true
+                          responseTimeout: 100
+                          method:
+                            get:
+                              criteria: ==
+                              responseCode: "200"
+              annotationCheck: "false"
+    metadata:
+      labels:
+        weight: "10"
+    name: container-kill
+    outputs: {}
+status:
+  finishedAt: null
+  startedAt: null
