@@ -1,0 +1,190 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  creationTimestamp: null
+  labels:
+    cluster_id: c2f63b7f-494b-49fd-9b1f-3288937c4c74
+    subject: custom-chaos-workflow-2_litmus
+    workflow_id: 1d3a644a-8926-42e2-97e4-3cb24a649ca2
+    workflows.argoproj.io/controller-instanceid: c2f63b7f-494b-49fd-9b1f-3288937c4c74
+  name: custom-chaos-workflow-2-1629298728
+  namespace: litmus
+spec:
+  arguments:
+    parameters:
+    - name: adminModeNamespace
+      value: litmus
+  entrypoint: custom-chaos
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  serviceAccountName: argo-chaos
+  templates:
+  - arguments: {}
+    inputs: {}
+    metadata: {}
+    name: custom-chaos
+    outputs: {}
+    steps:
+    - - arguments: {}
+        name: install-chaos-experiments
+        template: install-chaos-experiments
+    - - arguments: {}
+        name: pod-memory-hog
+        template: pod-memory-hog
+  - arguments: {}
+    container:
+      args:
+      - kubectl apply -f /tmp/pod-memory-hog.yaml -n {{workflow.parameters.adminModeNamespace}} |  sleep 30
+      command:
+      - sh
+      - -c
+      image: litmuschaos/k8s:latest
+      name: ""
+      resources: {}
+    inputs:
+      artifacts:
+      - name: pod-memory-hog
+        path: /tmp/pod-memory-hog.yaml
+        raw:
+          data: |
+            apiVersion: litmuschaos.io/v1alpha1
+            description:
+              message: |
+                Injects memory consumption on pods belonging to an app deployment
+            kind: ChaosExperiment
+            metadata:
+              name: pod-memory-hog
+              labels:
+                name: pod-memory-hog
+                app.kubernetes.io/part-of: litmus
+                app.kubernetes.io/component: chaosexperiment
+                app.kubernetes.io/version: 2.0.0
+            spec:
+              definition:
+                scope: Namespaced
+                permissions:
+                  - apiGroups:
+                      - ""
+                      - batch
+                      - apps
+                      - apps.openshift.io
+                      - argoproj.io
+                      - litmuschaos.io
+                    resources:
+                      - jobs
+                      - pods
+                      - pods/log
+                      - replicationcontrollers
+                      - deployments
+                      - statefulsets
+                      - daemonsets
+                      - replicasets
+                      - deploymentconfigs
+                      - rollouts
+                      - pods/exec
+                      - events
+                      - chaosengines
+                      - chaosexperiments
+                      - chaosresults
+                    verbs:
+                      - create
+                      - list
+                      - get
+                      - patch
+                      - update
+                      - delete
+                      - deletecollection
+                image: litmuschaos/go-runner:2.0.0
+                imagePullPolicy: Always
+                args:
+                  - -c
+                  - ./experiments -name pod-memory-hog
+                command:
+                  - /bin/bash
+                env:
+                  - name: TOTAL_CHAOS_DURATION
+                    value: "60"
+                  - name: MEMORY_CONSUMPTION
+                    value: "500"
+                  - name: NUMBER_OF_WORKERS
+                    value: "1"
+                  - name: PODS_AFFECTED_PERC
+                    value: ""
+                  - name: RAMP_TIME
+                    value: ""
+                  - name: LIB
+                    value: litmus
+                  - name: LIB_IMAGE
+                    value: litmuschaos/go-runner:2.0.0
+                  - name: STRESS_IMAGE
+                    value: alexeiled/stress-ng:latest-ubuntu
+                  - name: CONTAINER_RUNTIME
+                    value: docker
+                  - name: SOCKET_PATH
+                    value: /var/run/docker.sock
+                  - name: SEQUENCE
+                    value: parallel
+                  - name: TARGET_PODS
+                    value: ""
+                labels:
+                  name: pod-memory-hog
+                  app.kubernetes.io/part-of: litmus
+                  app.kubernetes.io/component: experiment-job
+                  app.kubernetes.io/version: 2.0.0
+    metadata: {}
+    name: install-chaos-experiments
+    outputs: {}
+  - arguments: {}
+    container:
+      args:
+      - -file=/tmp/chaosengine-pod-memory-hog.yaml
+      - -saveName=/tmp/engine-name
+      image: litmuschaos/litmus-checker:latest
+      name: ""
+      resources: {}
+    inputs:
+      artifacts:
+      - name: pod-memory-hog
+        path: /tmp/chaosengine-pod-memory-hog.yaml
+        raw:
+          data: |
+            apiVersion: litmuschaos.io/v1alpha1
+            kind: ChaosEngine
+            metadata:
+              namespace: "{{workflow.parameters.adminModeNamespace}}"
+              generateName: pod-memory-hog
+              labels:
+                instance_id: 50c0f245-da25-4f97-9e63-e4be19747294
+                workflow_name: custom-chaos-workflow-2-1629298728
+            spec:
+              appinfo:
+                appns: default
+                applabel: app=nginx
+                appkind: deployment
+              jobCleanUpPolicy: retain
+              engineState: active
+              chaosServiceAccount: litmus-admin
+              experiments:
+                - name: pod-memory-hog
+                  spec:
+                    components:
+                      env:
+                        - name: TOTAL_CHAOS_DURATION
+                          value: "60"
+                        - name: MEMORY_CONSUMPTION
+                          value: "500"
+                        - name: PODS_AFFECTED_PERC
+                          value: ""
+                        - name: CONTAINER_RUNTIME
+                          value: docker
+                        - name: SOCKET_PATH
+                          value: /var/run/docker.sock
+    metadata:
+      labels:
+        weight: "10"
+    name: pod-memory-hog
+    outputs: {}
+status:
+  finishedAt: null
+  startedAt: null
